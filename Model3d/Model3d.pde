@@ -2,16 +2,16 @@
 //import java.util.*;
 import processing.serial.*;
 
-Car F1 = new Car(700, 1400, 150);
+Car F1 = new Car(700, 1400, 150);  // car size
 
 void setup() {
-  size(3000, 1700, P3D);
+  size(3000, 1700, P3D);           // window size
   background(100);
   Car.P = this;
   F1.buildCar();
   F1.setPlane(width,height);
   Camera.setPlane(width,height);
-  F1.setCom("COM6",115200);
+  F1.setCom("COM6",115200);        // COM port
   F1.setOff(0.477465);
   //F1.setOff(0.63662);
 }
