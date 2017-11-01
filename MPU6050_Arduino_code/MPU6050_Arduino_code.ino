@@ -36,7 +36,8 @@
 #include "MPU6050_Wrapper.h"
 #include "TogglePin.h"
 
-#include "SPIslave.h"
+#include "config.h"
+#include "Send.h"
 #include <SPI.h>
 
 // Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
@@ -45,8 +46,6 @@
 #include "Wire.h"
 #endif
 
-#define MULT 3  // multiplier of readings - higher multiplier = better resolution
-                // for 10 reading of 10 = 1 degree
 
 /* =========================================================================
   NOTE: In addition to connection 3.3v, GND, SDA, and SCL, this sketch
@@ -111,11 +110,19 @@ const bool useSecondMpu = true;
 MPU6050_Array mpus(5); // number of gyros array ~edit
 #endif
 
-#define AD0_PIN_0 4  // Connect this pin to the AD0 pin on MPU #0
-#define AD0_PIN_1 5  // Connect this pin to the AD0 pin on MPU #1
-#define AD0_PIN_2 6  // Connect this pin to the AD0 pin on MPU #2
-#define AD0_PIN_3 7  // Connect this pin to the AD0 pin on MPU #3
-#define AD0_PIN_4 8  // Connect this pin to the AD0 pin on MPU #4
+#if PINOUT == STANDARD
+#define AD0_PIN_0 4  // Connect this pin to the AD0 pin on MPU #0 // fl
+#define AD0_PIN_1 5  // Connect this pin to the AD0 pin on MPU #1 // fr
+#define AD0_PIN_2 6  // Connect this pin to the AD0 pin on MPU #2 // rr
+#define AD0_PIN_3 7  // Connect this pin to the AD0 pin on MPU #3 // rl
+#define AD0_PIN_4 8  // Connect this pin to the AD0 pin on MPU #4 // central
+#else
+#define AD0_PIN_0 5  // Connect this pin to the AD0 pin on MPU #0 // fl
+#define AD0_PIN_1 7  // Connect this pin to the AD0 pin on MPU #1 // rl
+#define AD0_PIN_2 4  // Connect this pin to the AD0 pin on MPU #2 // fr
+#define AD0_PIN_3 8  // Connect this pin to the AD0 pin on MPU #3 // rr
+#define AD0_PIN_4 6  // Connect this pin to the AD0 pin on MPU #4 // central
+#endif
 
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 
@@ -134,6 +141,7 @@ VectorInt16 aaWorld; // [x, y, z]            world-frame accel sensor measuremen
 VectorFloat gravity; // [x, y, z]            gravity vector
 float euler[3];      // [psi, theta, phi]    Euler angle container
 float ypr[3];        // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+byte activeMPUs;
 
 
 // packet structure for InvenSense teapot demo
@@ -178,7 +186,7 @@ void setup() {
   // initialize device
 //  Serial.println(F("Initializing I2C devices..."));
   mpus.add(AD0_PIN_0);
-  if (useSecondMpu) mpus.add(AD0_PIN_1);
+  mpus.add(AD0_PIN_1);  // add more gyros ~edit
   mpus.add(AD0_PIN_2);  // add more gyros ~edit
   mpus.add(AD0_PIN_3);  // add more gyros ~edit
   mpus.add(AD0_PIN_4);  // add more gyros ~edit
@@ -190,11 +198,13 @@ void setup() {
 
   // verify connection
 //  Serial.println(F("Testing device connections..."));
-  if (mpus.testConnection()) {
+//  if (mpus.testConnection()) {
 //    Serial.println(F("MPU6050 connection successful"));
-  } else {
-    mpus.halt(F("MPU6050 connection failed, halting"));
-  }
+//  } else {
+//    mpus.halt(F("MPU6050 connection failed, halting"));
+//  }
+
+  activeMPUs = mpus.testConnection();
 
   // wait for ready
 //  Serial.println(F("\nSend any character to begin DMP programming and demo: "));
@@ -212,7 +222,7 @@ void setup() {
 
   // load and configure the DMP
 //  Serial.println(F("Initializing DMP..."));
-  mpus.dmpInitialize();
+  mpus.dmpInitialize(activeMPUs);
 
   // supply your own gyro offsets here, scaled for min sensitivity
   MPU6050_Wrapper* currentMPU = mpus.select(0);
@@ -227,12 +237,17 @@ void setup() {
     currentMPU->_mpu.setZGyroOffset(-85);
     currentMPU->_mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
   }
-  mpus.programDmp(0);
-  if (useSecondMpu)
-    mpus.programDmp(1);
-  mpus.programDmp(2); // multigyro hardcoded ~edit
-  mpus.programDmp(3); // multigyro hardcoded ~edit
-  mpus.programDmp(4); // multigyro hardcoded ~edit
+//  mpus.programDmp(0);
+//  mpus.programDmp(1);
+//  mpus.programDmp(2); // multigyro hardcoded ~edit
+//  mpus.programDmp(3); // multigyro hardcoded ~edit
+//  mpus.programDmp(4); // multigyro hardcoded ~edit
+//  Serial.println(activeMPUs);
+  for(int i=0; i<5; i++){
+    if(activeMPUs & 1<<i){
+      mpus.programDmp(i);
+    }
+  }
 }
 
 
@@ -247,7 +262,7 @@ void handleMPUevent(uint8_t mpu) {
       || currentMPU->_fifoCount >= 1024) {
     // reset so we can continue cleanly
     currentMPU->resetFIFO();
-    Serial.println(F("FIFO overflow!"));
+//    Serial.println(F("FIFO overflow!"));
     return;
   }
   // otherwise, check for DMP data ready interrupt (this should happen frequently)
@@ -270,16 +285,15 @@ void handleMPUevent(uint8_t mpu) {
     if(mpu==0){ // only one gyro output
       //Serial.print(ypr[1] * 180/M_PI);
       //Serial.print("\t");
-      value[0]=((int)((ypr[1] * 180/M_PI)*MULT));
+      value[0]=((int)-((ypr[1] * 180/M_PI)*MULT));
       //-cal[0];
       //SPIsend((byte)((ypr[1] * 180/M_PI)*10));
-      SPIsend4();
     }
     if(mpu==1){ // only one gyro output
       //Serial.print(ypr[1] * 180/M_PI);
       //Serial.print("\t");
       //Serial.println("");
-      value[1]=((int)((ypr[1] * 180/M_PI)*MULT));
+      value[1]=((int)-((ypr[1] * 180/M_PI)*MULT));
       //-cal[1];
       //SPIsend((byte)((ypr[1] * 180/M_PI)*10));
       //SPIsend2(value);
@@ -288,7 +302,7 @@ void handleMPUevent(uint8_t mpu) {
       //Serial.print(ypr[1] * 180/M_PI);
       //Serial.print("\t");
       //Serial.println("");
-      value[2]=((int)-((ypr[1] * 180/M_PI)*MULT));
+      value[2]=((int)((ypr[1] * 180/M_PI)*MULT));
       //-cal[2];
       //SPIsend((byte)((ypr[1] * 180/M_PI)*10));
       //SPIsend2(value);
@@ -297,7 +311,7 @@ void handleMPUevent(uint8_t mpu) {
       //Serial.print(ypr[1] * 180/M_PI);
       //Serial.print("\t");
       //Serial.println("");
-      value[3]=((int)-((ypr[1] * 180/M_PI)*MULT));
+      value[3]=((int)((ypr[1] * 180/M_PI)*MULT));
       //-cal[3];
       //SPIsend((byte)((ypr[1] * 180/M_PI)*10));
       
@@ -307,8 +321,8 @@ void handleMPUevent(uint8_t mpu) {
 //      Serial.print("\t");
 //      Serial.println("");
       value[4]=((int)((ypr[1] * 180/M_PI)*MULT));
-      value[5]=((int)((ypr[0] * 180/M_PI)*MULT));
-      value[6]=((int)((ypr[2] * 180/M_PI)*MULT));
+      value[5]=((int)((ypr[2] * 180/M_PI)*MULT));
+      value[6]=((int)((ypr[0] * 180/M_PI)*MULTZ));
       //-cal[4];
 //      //SPIsend((byte)((ypr[1] * 180/M_PI)*10));
 //      //SPIsend2(value);
@@ -325,22 +339,19 @@ void loop() {
 
   static uint8_t mpu = 0;
   static MPU6050_Wrapper* currentMPU = NULL;
-  if (useSecondMpu) {
-    for (int i=0;i<5;i++) { // number of gyros hardcoded here ~edit
-      //mpu=(mpu+1)%5; // failed attempt at round robin
-      mpu=i;
-      currentMPU = mpus.select(mpu);
-      if (currentMPU->isDue()) {
-        handleMPUevent(mpu);
-      }
-    }
-  } else {
-    mpu=0;
+  
+  for (int i=0;i<5;i++) { // number of gyros hardcoded here ~edit
+    if(!(activeMPUs & 1<<i))
+      continue;
+    //mpu=(mpu+1)%5; // failed attempt at round robin
+    mpu=i;
     currentMPU = mpus.select(mpu);
     if (currentMPU->isDue()) {
       handleMPUevent(mpu);
     }
   }
+  
+  sendSU();
   
   // other program behavior stuff here
   // .

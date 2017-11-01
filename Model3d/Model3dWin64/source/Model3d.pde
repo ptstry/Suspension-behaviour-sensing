@@ -9,9 +9,8 @@ void setup() {
   Prop.setSpace();
   F1 = new Car(Prop.CAR_WIDTH, Prop.CAR_HEIGHT, Prop.CAR_DEPTH); // car main body
   
-  fullScreen(P3D);
-  //size(1333, 768, P3D);
-  //surface.setSize(Prop.WIDTH, Prop.HEIGHT);
+  size(1333, 768, P3D);
+  surface.setSize(Prop.WIDTH, Prop.HEIGHT);
   
   background(100);
   Car.P = this;

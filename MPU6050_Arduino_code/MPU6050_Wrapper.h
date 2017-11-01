@@ -133,17 +133,21 @@ class MPU6050_Array {
       }
     }
 
-    bool testConnection() {
+    byte testConnection() {
+      byte result = 0;
       for (int i = 0; i < _fillIndex; i++) {
         select(i);
-        if (!_array[i]->_mpu.testConnection())
-          return false;
+        if (_array[i]->_mpu.testConnection())
+          result |= 1<<i;
       }
-      return true;
+      return result;
     }
 
-    void dmpInitialize() {
+    void dmpInitialize(byte activeMPUs) {
       for (int i = 0; i < _fillIndex; i++) {
+        if(!(activeMPUs & 1<<i))
+          continue;
+        
         select(i);
         _array[i]->dmpInitialize();
       }
@@ -188,7 +192,7 @@ class MPU6050_Array {
     void halt(const __FlashStringHelper* errMessage = NULL) {
       if (errMessage)
         Serial.println(errMessage);
-      while (true)
+      //while (true)
         ;
     }
 
